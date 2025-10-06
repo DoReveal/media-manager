@@ -1,0 +1,7 @@
+build/bin
+node_modules
+frontend/dist
+.env.*
+.DS_Store
+.vscode
+media-manager
