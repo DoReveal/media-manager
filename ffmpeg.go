@@ -116,16 +116,17 @@ func downloadAndExtractFFmpeg(targetDir string) error {
 		}
 	}
 
+	binPath := ffmpegBinaryPath(targetDir)
+
 	// Make executable on macOS
 	if runtime.GOOS == "darwin" {
-		binPath := filepath.Join(targetDir, "ffmpeg")
 		if err := os.Chmod(binPath, 0755); err != nil {
 			return fmt.Errorf("chmod failed: %w", err)
 		}
 	}
 
-	// Quick verify
-	cmd := execCommand("ffmpeg", "-version")
+	// Quick verify using absolute path so PATH is not required yet
+	cmd := execCommand(binPath, "-version")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("FFmpeg verify failed: %w; output: %s", err, out)
 	}
