@@ -14,6 +14,12 @@ import (
 
 const appName = "doreveal-tools"
 
+type binaryAsset struct {
+	name string
+	url  string
+	path string
+}
+
 func ensureFFmpeg() error {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
@@ -21,9 +27,13 @@ func ensureFFmpeg() error {
 	}
 	appCache := filepath.Join(cacheDir, appName)
 	installedFlag := filepath.Join(appCache, "installed")
+	binaries, err := platformBinaryAssets(appCache)
+	if err != nil {
+		return err
+	}
 
 	// Check if already installed
-	if _, err := os.Stat(installedFlag); err == nil {
+	if binariesReady(binaries) {
 		setFFmpegPath(appCache)
 		return nil
 	}
@@ -32,7 +42,7 @@ func ensureFFmpeg() error {
 	if err := os.MkdirAll(appCache, 0755); err != nil {
 		return fmt.Errorf("failed to create cache dir: %w", err)
 	}
-	if err := downloadAndExtractFFmpeg(appCache); err != nil {
+	if err := downloadAndExtractFFmpeg(appCache, binaries); err != nil {
 		return fmt.Errorf("FFmpeg setup failed: %w", err)
 	}
 
@@ -45,25 +55,67 @@ func ensureFFmpeg() error {
 	return nil
 }
 
-func downloadAndExtractFFmpeg(targetDir string) error {
-	var url string
+func platformBinaryAssets(targetDir string) ([]binaryAsset, error) {
 	switch runtime.GOOS {
 	case "darwin":
+		arch := "amd64"
 		if runtime.GOARCH == "arm64" {
-			url = "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
-		} else { // amd64/386 fallback to amd64
-			url = "https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/release/ffmpeg.zip"
+			arch = "arm64"
 		}
+		base := fmt.Sprintf("https://ffmpeg.martin-riedl.de/redirect/latest/macos/%s/release/", arch)
+		return []binaryAsset{
+			{name: "ffmpeg", url: base + "ffmpeg.zip", path: ffmpegBinaryPath(targetDir)},
+			{name: "ffprobe", url: base + "ffprobe.zip", path: ffprobeBinaryPath(targetDir)},
+		}, nil
 	case "windows":
 		if runtime.GOARCH != "amd64" {
-			return errors.New("windows arm64 not supported; use x64 build")
+			return nil, errors.New("windows arm64 not supported; use x64 build")
 		}
-		url = "https://ffmpeg.martin-riedl.de/redirect/latest/windows/amd64/release/ffmpeg.zip"
+		base := "https://ffmpeg.martin-riedl.de/redirect/latest/windows/amd64/release/"
+		return []binaryAsset{
+			{name: "ffmpeg", url: base + "ffmpeg.zip", path: ffmpegBinaryPath(targetDir)},
+			{name: "ffprobe", url: base + "ffprobe.zip", path: ffprobeBinaryPath(targetDir)},
+		}, nil
 	default:
-		return errors.New("unsupported OS")
+		return nil, errors.New("unsupported OS")
 	}
+}
 
-	// Download ZIP to temp
+func binariesReady(binaries []binaryAsset) bool {
+	for _, bin := range binaries {
+		info, err := os.Stat(bin.path)
+		if err != nil {
+			return false
+		}
+		if info.IsDir() {
+			return false
+		}
+	}
+	return true
+}
+
+func downloadAndExtractFFmpeg(targetDir string, binaries []binaryAsset) error {
+	for _, bin := range binaries {
+		if err := downloadAndExtract(bin.url, targetDir); err != nil {
+			return fmt.Errorf("download %s failed: %w", bin.name, err)
+		}
+		if _, err := os.Stat(bin.path); err != nil {
+			return fmt.Errorf("%s missing after download: %w", bin.name, err)
+		}
+		if runtime.GOOS == "darwin" {
+			if err := os.Chmod(bin.path, 0755); err != nil {
+				return fmt.Errorf("chmod %s failed: %w", bin.name, err)
+			}
+		}
+		cmd := execCommand(bin.path, "-version")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("%s verify failed: %w; output: %s", bin.name, err, out)
+		}
+	}
+	return nil
+}
+
+func downloadAndExtract(url, targetDir string) error {
 	resp, err := http.Get(url)
 	if err != nil {
 		return fmt.Errorf("download failed: %w", err)
@@ -73,63 +125,53 @@ func downloadAndExtractFFmpeg(targetDir string) error {
 		return fmt.Errorf("download failed with status: %s", resp.Status)
 	}
 
-	tmpZip := filepath.Join(os.TempDir(), "ffmpeg.zip")
-	out, err := os.Create(tmpZip)
+	out, err := os.CreateTemp("", "ffmpeg-download-*.zip")
 	if err != nil {
 		return fmt.Errorf("create temp file failed: %w", err)
 	}
-	defer out.Close()
-	defer os.Remove(tmpZip) // Clean up
-
 	if _, err := io.Copy(out, resp.Body); err != nil {
+		out.Close()
+		os.Remove(out.Name())
 		return fmt.Errorf("copy download failed: %w", err)
 	}
+	out.Close()
+	defer os.Remove(out.Name())
 
-	// Extract ZIP
-	r, err := zip.OpenReader(tmpZip)
+	r, err := zip.OpenReader(out.Name())
 	if err != nil {
 		return fmt.Errorf("open ZIP failed: %w", err)
 	}
 	defer r.Close()
 
 	for _, f := range r.File {
-		rc, err := f.Open()
-		if err != nil {
-			continue // Skip corrupted
-		}
-		defer rc.Close()
-
 		fPath := filepath.Join(targetDir, f.Name)
 		if f.FileInfo().IsDir() {
-			os.MkdirAll(fPath, f.Mode())
+			if err := os.MkdirAll(fPath, f.Mode()); err != nil {
+				return fmt.Errorf("create dir %s failed: %w", f.Name, err)
+			}
 			continue
 		}
-
+		if err := os.MkdirAll(filepath.Dir(fPath), 0755); err != nil {
+			return fmt.Errorf("create parent dir for %s failed: %w", f.Name, err)
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return fmt.Errorf("open %s failed: %w", f.Name, err)
+		}
 		wf, err := os.OpenFile(fPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
 		if err != nil {
+			rc.Close()
 			return fmt.Errorf("extract %s failed: %w", f.Name, err)
 		}
-		defer wf.Close()
-
 		if _, err := io.Copy(wf, rc); err != nil {
+			wf.Close()
+			rc.Close()
 			return fmt.Errorf("copy %s failed: %w", f.Name, err)
 		}
+		wf.Close()
+		rc.Close()
 	}
 
-	binPath := ffmpegBinaryPath(targetDir)
-
-	// Make executable on macOS
-	if runtime.GOOS == "darwin" {
-		if err := os.Chmod(binPath, 0755); err != nil {
-			return fmt.Errorf("chmod failed: %w", err)
-		}
-	}
-
-	// Quick verify using absolute path so PATH is not required yet
-	cmd := execCommand(binPath, "-version")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("FFmpeg verify failed: %w; output: %s", err, out)
-	}
 	return nil
 }
 
@@ -146,6 +188,14 @@ func setFFmpegPath(binDir string) {
 
 func ffmpegBinaryPath(dir string) string {
 	name := "ffmpeg"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return filepath.Join(dir, name)
+}
+
+func ffprobeBinaryPath(dir string) string {
+	name := "ffprobe"
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
