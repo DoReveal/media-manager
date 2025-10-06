@@ -1,6 +1,6 @@
 # DoReveal Tools
 
-A Wails desktop app that combines a Go backend with a React frontend.
+DoReveal Tools is a desktop suite of media utilities for inspecting and converting audio or video files. Use it to change formats, adjust quality, or prepare assets for different devices with a streamlined, offline workflow powered by a Go backend and React UI.
 
 ## Prerequisites
 - macOS with [Homebrew](https://brew.sh/) available in your shell
@@ -31,7 +31,7 @@ Make sure `$(go env GOPATH)/bin` is on your PATH so the `wails` command is avail
 
 ## Project Setup
 ```bash
-git clone <repo-url>
+git clone https://github.com/DoReveal/media-manager.git doreveal-tools
 cd doreveal-tools
 
 # Install frontend dependencies
