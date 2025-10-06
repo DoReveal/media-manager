@@ -57,7 +57,7 @@ jobs:
       - name: Create DMG
         run: |
           APP_PATH="build/bin/DoReveal Tools.app"
-          DMG_PATH="build/bin/doreveal-tools.dmg"
+          DMG_PATH="build/bin/Doreveal-Tools.dmg"
           if [ ! -d "${APP_PATH}" ]; then
             echo "App bundle not found at ${APP_PATH}" >&2
             exit 1

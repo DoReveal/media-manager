@@ -8,6 +8,13 @@
   "frontend:dev:serverUrl": "auto",
   "author": {
     "name": "Niket Patel",
-    "email": "nexneo@gmail.com"
+    "email": "niket@doreveal.com"
+  },
+  "info": {
+    "productVersion": "1.1.2",
+    "productName": "DoReveal Tools",
+    "copyright": "Copyright Synthefai, Inc.",
+    "companyName": "Synthefai, Inc.",
+    "comments": "Built for https://doreveal.com customers"
   }
 }
