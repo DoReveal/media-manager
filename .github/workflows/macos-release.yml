@@ -1,0 +1,81 @@
+name: macOS Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      clean:
+        description: 'Remove build/bin before packaging'
+        required: false
+        default: 'true'
+  push:
+    tags:
+      - '*'
+
+env:
+  NODE_OPTIONS: "--max-old-space-size=4096"
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.20.x'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
+
+      - name: Build universal macOS bundle
+        env:
+          CLEAN_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.clean || 'true' }}
+        run: |
+          CLEAN_FLAG=""
+          if [[ "${CLEAN_INPUT}" == 'true' ]]; then
+            CLEAN_FLAG="-clean"
+          fi
+          wails build ${CLEAN_FLAG} -platform darwin/universal
+
+      - name: List packaged files
+        run: ls -R build/bin
+
+      - name: Locate DMG
+        id: locate_dmg
+        run: |
+          DMG_PATH=$(find build/bin -maxdepth 3 -name '*.dmg' -print -quit)
+          if [ -z "$DMG_PATH" ]; then
+            echo "No DMG file produced" >&2
+            exit 1
+          fi
+          echo "path=$DMG_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-dmg
+          path: ${{ steps.locate_dmg.outputs.path }}
+
+      - name: Publish GitHub release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ steps.locate_dmg.outputs.path }}
+          generate_release_notes: true

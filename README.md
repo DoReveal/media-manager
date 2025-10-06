@@ -53,3 +53,12 @@ Create a production build:
 wails build
 ```
 The packaged binaries will be written to `build/bin/`.
+
+## Package for macOS
+- Build a universal macOS bundle locally with:
+  ```bash
+  wails build -clean -platform darwin/universal
+  ```
+  This regenerates the frontend, produces `DoReveal-Tools.app`, and creates a signed disk image at `build/bin/DoReveal-Tools.dmg` (or a similarly named `.dmg` if you change the app name).
+- Upload the `.dmg` when drafting a GitHub release, or copy it to other machines for distribution.
+- You can also run the **macOS Release Build** workflow from the Actions tab (or push a tag) to rebuild on GitHub-hosted macOS runners. The workflow keeps the DMG as a downloadable artifact and automatically attaches it to the tag’s release so you can publish without rebuilding locally.
