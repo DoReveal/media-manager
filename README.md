@@ -2,6 +2,11 @@
 
 DoReveal Tools is a desktop suite of media utilities for inspecting and converting audio or video files. Use it to change formats, adjust quality, or prepare assets for different devices with a streamlined, offline workflow powered by a Go backend and React UI.
 
+<p align="center">
+  <img width="40%" alt="Screenshot 2025-10-07 at 2 01 23 PM" src="https://github.com/user-attachments/assets/56341cc8-9b6b-4077-a9e5-8f0252274eda" />
+  <img width="40%" alt="Screenshot 2025-10-07 at 2 02 04 PM" src="https://github.com/user-attachments/assets/d31a48e4-10f9-4466-8e8b-eeac4f77e102" />
+</p>
+
 ## Prerequisites
 - macOS with [Homebrew](https://brew.sh/) available in your shell
 - Git for cloning this repository
