@@ -23,6 +23,12 @@ const formatOptions: Record<MediaKind, FormatOption[]> = {
   ],
 };
 
+const playbackSpeedOptions = [
+  { value: "0.75", label: "0.75x (slower)" },
+  { value: "1", label: "1x (normal)" },
+  { value: "1.25", label: "1.25x (faster)" },
+];
+
 function formatFileSize(bytes?: number): string {
   if (!bytes || bytes <= 0) {
     return "-";
@@ -73,6 +79,7 @@ function parseError(error: unknown): string {
 function App() {
   const [media, setMedia] = useState<main.MediaInfo | null>(null);
   const [targetFormat, setTargetFormat] = useState<string>("");
+  const [playbackSpeed, setPlaybackSpeed] = useState<string>("1");
   const [error, setError] = useState<string | null>(null);
   const [isInspecting, setIsInspecting] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
@@ -81,10 +88,12 @@ function App() {
   useEffect(() => {
     if (!media) {
       setTargetFormat("");
+      setPlaybackSpeed("1");
       return;
     }
     const options = formatOptions[media.kind as MediaKind] ?? [];
     setTargetFormat(options[0]?.value ?? "");
+    setPlaybackSpeed("1");
     setResult(null);
   }, [media]);
 
@@ -94,6 +103,12 @@ function App() {
     }
     return formatOptions[media.kind as MediaKind] ?? [];
   }, [media]);
+
+  useEffect(() => {
+    if (targetFormat !== "mp4") {
+      setPlaybackSpeed("1");
+    }
+  }, [targetFormat]);
 
   const mediaMeta = useMemo(() => {
     if (!media) {
@@ -151,10 +166,12 @@ function App() {
     if (!media || !targetFormat) {
       return;
     }
+    const selectedSpeed =
+      targetFormat === "mp4" ? Number(playbackSpeed) || 1 : 1;
     setIsConverting(true);
     setError(null);
 
-    ConvertMedia(media.path, targetFormat)
+    ConvertMedia(media.path, targetFormat, selectedSpeed)
       .then((conversion) => {
         setResult(conversion);
       })
@@ -165,7 +182,7 @@ function App() {
       .finally(() => {
         setIsConverting(false);
       });
-  }, [media, targetFormat]);
+  }, [media, targetFormat, playbackSpeed]);
 
   const handleOpenOutput = useCallback(() => {
     if (!resultPath) {
@@ -256,6 +273,29 @@ function App() {
                     </label>
                   ))}
                 </div>
+                {media.kind === "video" && targetFormat === "mp4" && (
+                  <div className="speed-selector">
+                    <label
+                      htmlFor="playback-speed"
+                      className="speed-selector__label"
+                    >
+                      Playback speed
+                    </label>
+                    <select
+                      id="playback-speed"
+                      className="speed-selector__control"
+                      value={playbackSpeed}
+                      onChange={(event) => setPlaybackSpeed(event.target.value)}
+                      disabled={isConverting}
+                    >
+                      {playbackSpeedOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <button
                   type="button"
                   className="primary-button"

@@ -230,6 +230,34 @@
   background: rgba(93, 214, 255, 0.12);
 }
 
+.speed-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.speed-selector__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.speed-selector__control {
+  appearance: none;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  color: #f5f9ff;
+  padding: 10px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.speed-selector__control:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .primary-button {
   align-self: stretch;
   padding: 11px 20px;

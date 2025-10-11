@@ -6,6 +6,7 @@ export namespace main {
 	    kind: string;
 	    duration: number;
 	    size: number;
+	    hasAudio: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new MediaInfo(source);
@@ -18,6 +19,7 @@ export namespace main {
 	        this.kind = source["kind"];
 	        this.duration = source["duration"];
 	        this.size = source["size"];
+	        this.hasAudio = source["hasAudio"];
 	    }
 	}
 	export class ConversionResult {

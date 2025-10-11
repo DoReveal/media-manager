@@ -35,16 +35,17 @@ func loadMediaInfo(path string) (*MediaInfo, error) {
 		return nil, errors.New("expected a file but got a directory")
 	}
 
-	kind, duration, err := probeMedia(path)
+	kind, duration, hasAudio, err := probeMedia(path)
 	if err != nil {
 		return nil, err
 	}
 
 	info := &MediaInfo{
-		Path: path,
-		Name: filepath.Base(path),
-		Kind: kind,
-		Size: stat.Size(),
+		Path:     path,
+		Name:     filepath.Base(path),
+		Kind:     kind,
+		Size:     stat.Size(),
+		HasAudio: hasAudio,
 	}
 	if duration > 0 {
 		info.Duration = duration
@@ -52,34 +53,41 @@ func loadMediaInfo(path string) (*MediaInfo, error) {
 	return info, nil
 }
 
-func probeMedia(path string) (string, float64, error) {
+func probeMedia(path string) (string, float64, bool, error) {
 	cmd := execCommand("ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", path)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		trimmed := strings.TrimSpace(string(out))
 		if trimmed == "" {
-			return "", 0, fmt.Errorf("ffprobe failed: %w", err)
+			return "", 0, false, fmt.Errorf("ffprobe failed: %w", err)
 		}
-		return "", 0, fmt.Errorf("ffprobe failed: %w; %s", err, trimmed)
+		return "", 0, false, fmt.Errorf("ffprobe failed: %w; %s", err, trimmed)
 	}
 
 	var parsed ffprobeOutput
 	if err := json.Unmarshal(out, &parsed); err != nil {
-		return "", 0, fmt.Errorf("parse ffprobe output: %w", err)
+		return "", 0, false, fmt.Errorf("parse ffprobe output: %w", err)
 	}
 
-	kind := ""
+	hasVideo := false
+	hasAudio := false
 	for _, stream := range parsed.Streams {
 		if stream.CodecType == "video" {
-			kind = "video"
-			break
+			hasVideo = true
+			continue
 		}
-		if stream.CodecType == "audio" && kind == "" {
-			kind = "audio"
+		if stream.CodecType == "audio" {
+			hasAudio = true
 		}
 	}
+	kind := ""
+	if hasVideo {
+		kind = "video"
+	} else if hasAudio {
+		kind = "audio"
+	}
 	if kind == "" {
-		return "", 0, errors.New("unsupported media: no audio or video stream")
+		return "", 0, false, errors.New("unsupported media: no audio or video stream")
 	}
 
 	var duration float64
@@ -90,10 +98,10 @@ func probeMedia(path string) (string, float64, error) {
 		}
 	}
 
-	return kind, duration, nil
+	return kind, duration, hasAudio, nil
 }
 
-func convertMedia(path, targetFormat string) (*ConversionResult, error) {
+func convertMedia(path, targetFormat string, playbackSpeed float64) (*ConversionResult, error) {
 	sourceInfo, err := loadMediaInfo(path)
 	if err != nil {
 		return nil, err
@@ -116,7 +124,21 @@ func convertMedia(path, targetFormat string) (*ConversionResult, error) {
 		if sourceInfo.Kind != "video" {
 			return nil, fmt.Errorf("cannot convert %s to mp4", sourceInfo.Kind)
 		}
-		args = append(args, "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-c:a", "aac", "-movflags", "+faststart", outputPath)
+		speed := playbackSpeed
+		if speed <= 0 {
+			speed = 1
+		}
+		if speed < 0.5 || speed > 2 {
+			return nil, fmt.Errorf("unsupported playback speed: %.2f", speed)
+		}
+		args = append(args, "-c:v", "libx264", "-preset", "medium", "-crf", "23")
+		if speed != 1 {
+			args = append(args, "-filter:v", fmt.Sprintf("setpts=PTS/%.6f", speed))
+			if sourceInfo.HasAudio {
+				args = append(args, "-filter:a", fmt.Sprintf("atempo=%.6f", speed))
+			}
+		}
+		args = append(args, "-c:a", "aac", "-movflags", "+faststart", outputPath)
 	case "m4a":
 		if sourceInfo.Kind == "video" {
 			args = append(args, "-vn")

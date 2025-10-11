@@ -37,6 +37,7 @@ type MediaInfo struct {
 	Kind     string  `json:"kind"`
 	Duration float64 `json:"duration"`
 	Size     int64   `json:"size"`
+	HasAudio bool    `json:"hasAudio"`
 }
 
 type ConversionResult struct {
@@ -60,7 +61,7 @@ func (a *App) InspectMedia(path string) (*MediaInfo, error) {
 	return info, nil
 }
 
-func (a *App) ConvertMedia(sourcePath, targetFormat string) (*ConversionResult, error) {
+func (a *App) ConvertMedia(sourcePath, targetFormat string, playbackSpeed float64) (*ConversionResult, error) {
 	if sourcePath == "" {
 		return nil, errors.New("sourcePath is required")
 	}
@@ -71,7 +72,10 @@ func (a *App) ConvertMedia(sourcePath, targetFormat string) (*ConversionResult, 
 	if err != nil {
 		return nil, fmt.Errorf("resolve path: %w", err)
 	}
-	result, err := convertMedia(absolute, targetFormat)
+	if playbackSpeed <= 0 {
+		playbackSpeed = 1
+	}
+	result, err := convertMedia(absolute, targetFormat, playbackSpeed)
 	if err != nil {
 		return nil, err
 	}
